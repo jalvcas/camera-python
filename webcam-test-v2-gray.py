@@ -7,6 +7,7 @@ import sys
 import wmi
 import cv2
 import time
+import numpy as np
 from datetime import datetime
 
 def list_camera_devices_wmi():
@@ -123,6 +124,18 @@ class WebcamTest(QMainWindow):
         status_layout.addWidget(self.status_text)
 
         left_layout.addWidget(status_group)
+
+        # Parameters group
+        params_group = QGroupBox("Parameters")
+        params_layout = QVBoxLayout(params_group)
+
+        min_threshold_trackbar = cv2.createTrackbar("Min","Threshold",0,100 ,self.on_trackbar)
+        max_threshold_trackbar = cv2.createTrackbar("Max","Threshold",100, 200,self.on_trackbar)
+
+        params_layout.addWidget(min_threshold_trackbar)
+        params_layout.addWidget(max_threshold_trackbar)
+
+        left_layout.addWidget(params_group)
 
         # Log group
         log_group = QGroupBox("Event Log")
@@ -248,13 +261,22 @@ class WebcamTest(QMainWindow):
                 if elapsed_time > 0:
                     self.fps = self.frame_count / elapsed_time
                 
-                # Convert frame to format suitable for Qt
-                rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                h, w, ch = rgb_image.shape
-                bytes_per_line = ch * w
-                
+                # Convert frame to black and white (grayscale)
+                gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                # Aplicar Gaussian blur para reducir el ruido
+                blurred_image = cv2.GaussianBlur(gray_image,(5,5),0)
+
+                edges_image = cv2.Canny(blurred_image, 70,130)
+
+
+                image_to_show = edges_image
+
+                h, w = image_to_show.shape
+                bytes_per_line = w  # Only one channel for grayscale
+
                 # Convert to QImage and then to QPixmap
-                qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+                qt_image = QImage(image_to_show.data, w, h, bytes_per_line, QImage.Format.Format_Grayscale8)
                 
                 # Scale the image to fit the label while maintaining aspect ratio
                 pixmap = QPixmap.fromImage(qt_image)
@@ -329,6 +351,40 @@ class WebcamTest(QMainWindow):
         """Clean up resources when window is closed"""
         self.stop_camera()
         event.accept()
+
+    def detect_edges(frame, low_threshold=100, high_threshold=200, aperture_size=3):
+        """
+        Detect edges in a frame using different methods
+        
+        Parameters:
+        -----------
+        frame : numpy.ndarray
+            Input frame
+        method : str
+            Edge detection method ('canny', 'sobel', 'laplacian', 'prewitt')
+        low_threshold : int
+            Lower threshold for Canny edge detection
+        high_threshold : int 
+            Higher threshold for Canny edge detection
+        aperture_size : int
+            Aperture size for gradient operators
+            
+        Returns:
+        --------
+        numpy.ndarray
+            Frame with detected edges
+        """
+
+        # Apply Gaussian blur to reduce noise
+        blurred = cv2.GaussianBlur(frame, (5, 5), 0)
+
+        # Canny edge detection
+        edges = cv2.Canny(blurred, low_threshold, high_threshold, apertureSize=aperture_size)
+        # Convert back to 3 channels for display consistency
+        return cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+
+    def on_trackbar():
+        pass
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
